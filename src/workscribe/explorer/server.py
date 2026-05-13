@@ -78,7 +78,7 @@ class ExplorerRequestHandler(BaseHTTPRequestHandler):
         path: str,
         query: dict[str, list[str]],
     ) -> tuple[int, dict[str, str], bytes]:
-        with _open_readonly_database(server.database_path) as conn:
+        with open_readonly_database(server.database_path) as conn:
             if path == "/api/meta":
                 metadata = get_table_metadata(conn)
                 return _json_response(
@@ -154,7 +154,7 @@ def run_explorer(
             "Explorer frontend is not built. Run `npm --prefix frontend run build` first."
         )
 
-    with _open_readonly_database(workspace.database_path) as conn:
+    with open_readonly_database(workspace.database_path) as conn:
         get_table_metadata(conn)
 
     server = ExplorerHTTPServer(
@@ -178,7 +178,7 @@ def run_explorer(
         server.server_close()
 
 
-def _open_readonly_database(database_path: Path) -> sqlite3.Connection:
+def open_readonly_database(database_path: Path) -> sqlite3.Connection:
     resolved = Path(database_path).resolve()
     uri = f"file:{quote(str(resolved), safe='/:')}?mode=ro"
     conn = sqlite3.connect(uri, uri=True)

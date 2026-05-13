@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 
 from workscribe.db import initialize_database
-from workscribe.explorer.server import ExplorerHTTPServer, ExplorerRequestHandler
+from workscribe.explorer.server import (
+    ExplorerHTTPServer,
+    ExplorerRequestHandler,
+    open_readonly_database,
+)
 
 
 class ExplorerServerTests(unittest.TestCase):
@@ -102,6 +106,25 @@ class ExplorerServerTests(unittest.TestCase):
         self.assertEqual(500, status)
         self.assertEqual("application/json", headers["Content-Type"])
         self.assertIn("Missing static asset", payload["error"])
+
+    def test_open_readonly_database_reads_seeded_database_and_rejects_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmpdir:
+            tmpdir = Path(raw_tmpdir)
+            database_path = tmpdir / ".codex-workscribe.sqlite"
+            server = self.make_server(tmpdir)
+
+            with open_readonly_database(database_path) as conn:
+                client_name = conn.execute("SELECT name FROM clients WHERE id = 1").fetchone()["name"]
+                with self.assertRaises(sqlite3.OperationalError):
+                    conn.execute(
+                        """
+                        INSERT INTO clients (client_key, name, created_at, updated_at)
+                        VALUES ('beta', 'Beta', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z')
+                        """
+                    )
+
+            self.assertEqual(server.database_path, database_path.resolve())
+            self.assertEqual("Acme", client_name)
 
 
 if __name__ == "__main__":

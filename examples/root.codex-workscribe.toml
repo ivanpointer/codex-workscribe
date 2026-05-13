@@ -1,0 +1,13 @@
+client_key = "hypknowledge"
+client_name = "HypKnowledge"
+billing_mode = "time_and_materials"
+default_hourly_rate = 150
+currency = "USD"
+program_name = "HIPAA Modernization"
+
+[reporting]
+timezone = "America/Chicago"
+
+[traditional_estimation]
+enabled = true
+default_confidence = "medium"

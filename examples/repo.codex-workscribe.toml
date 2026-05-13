@@ -1,0 +1,4 @@
+project_key = "visualstudio-hypknowledge"
+project_name = "visualstudio-hypknowledge"
+project_code = "HK-VS"
+tags = ["php", "laravel", "security", "modernization"]

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-workscribe"
+version = "0.1.0"
+description = "Billing-oriented telemetry and reporting for Codex-assisted work"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+  { name = "Ivan Pointer" }
+]
+dependencies = []
+
+[project.scripts]
+workscribe = "workscribe.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

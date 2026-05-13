@@ -251,3 +251,46 @@ pre {
     max-height: 45vh;
   }
 }
+
+@media (max-width: 700px) {
+  .shell {
+    display: block;
+  }
+
+  .sidebar {
+    border-bottom: 1px solid #d8dde3;
+    border-right: 0;
+    display: grid;
+    gap: 4px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .brand {
+    grid-column: 1 / -1;
+    margin-bottom: 8px;
+  }
+
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .search {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .table-wrap {
+    max-height: 55vh;
+  }
+
+  th,
+  td {
+    max-width: 180px;
+  }
+
+  .pager {
+    justify-content: space-between;
+  }
+}

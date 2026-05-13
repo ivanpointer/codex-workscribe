@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import ipaddress
 import sys
 from pathlib import Path
 
@@ -33,7 +32,6 @@ from workscribe.db import (
     utc_now,
 )
 from workscribe.hooks import handle_codex_hook, handle_git_hook, sync_metadata
-from workscribe.explorer.server import run_explorer
 from workscribe.install import (
     DEFAULT_GLOBAL_GIT_HOOKS_DIR,
     DEFAULT_GLOBAL_STATE_PATH,
@@ -149,14 +147,6 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--scope", choices=["project", "program"], default="project")
     report_parser.add_argument("--output-dir", type=Path)
     report_parser.set_defaults(func=cmd_report)
-
-    explore_parser = subparsers.add_parser("explore", help="Launch a local read-only SQLite data explorer")
-    explore_parser.add_argument("--path", type=Path, default=Path.cwd())
-    explore_parser.add_argument("--host", default="127.0.0.1")
-    explore_parser.add_argument("--port", type=int, default=0)
-    explore_parser.add_argument("--open", dest="open_browser", action="store_true", default=True)
-    explore_parser.add_argument("--no-open", dest="open_browser", action="store_false")
-    explore_parser.set_defaults(func=cmd_explore)
 
     status_parser = subparsers.add_parser("status", help="Show resolved workscribe context")
     status_parser.add_argument("--path", type=Path, default=Path.cwd())
@@ -444,24 +434,6 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"  csv:      {artifacts.csv_path}")
     print(f"  charts:   {artifacts.activity_svg_path.name}, {artifacts.evidence_svg_path.name}")
     return 0
-
-
-def cmd_explore(args: argparse.Namespace) -> int:
-    validate_explorer_host(args.host)
-    workspace = discover_workspace(args.path.resolve())
-    run_explorer(workspace, host=args.host, port=args.port, open_browser=args.open_browser)
-    return 0
-
-
-def validate_explorer_host(host: str) -> None:
-    if host == "localhost":
-        return
-    try:
-        if ipaddress.ip_address(host).is_loopback:
-            return
-    except ValueError:
-        pass
-    raise WorkscribeError("The explorer is local-only; --host must be localhost or a loopback address.")
 
 
 def cmd_hook_codex(args: argparse.Namespace) -> int:

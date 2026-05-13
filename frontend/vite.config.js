@@ -1,11 +1,12 @@
-import { defineConfig } from 'vite'
+import { fileURLToPath, URL } from 'node:url'
+
 import vue from '@vitejs/plugin-vue'
-import { resolve } from 'node:path'
+import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [vue()],
   build: {
-    outDir: resolve(__dirname, '../src/workscribe/explorer/static'),
-    emptyOutDir: true
-  }
+    outDir: fileURLToPath(new URL('../src/workscribe/explorer/static', import.meta.url)),
+    emptyOutDir: true,
+  },
 })

@@ -1,33 +1,45 @@
-async function requestJson(path) {
-  const response = await fetch(path)
-  const payload = await response.json()
+const jsonHeaders = {
+  Accept: 'application/json',
+}
+
+async function requestJson(path, params = {}) {
+  const url = new URL(path, window.location.origin)
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, value)
+    }
+  }
+
+  const response = await fetch(url, { headers: jsonHeaders })
+  const payload = await response.json().catch(() => ({}))
+
   if (!response.ok) {
     throw new Error(payload.error || `Request failed: ${response.status}`)
   }
+
   return payload
 }
 
-export function fetchMeta() {
+export function getMeta() {
   return requestJson('/api/meta')
 }
 
-export function fetchTables() {
+export function getTables() {
   return requestJson('/api/tables')
 }
 
-export function fetchRows({ table, limit, offset, sort, direction, search, filters }) {
-  const params = new URLSearchParams()
-  params.set('limit', String(limit))
-  params.set('offset', String(offset))
-  if (sort) params.set('sort', sort)
-  if (direction) params.set('direction', direction)
-  if (search) params.set('search', search)
-  for (const [key, value] of Object.entries(filters || {})) {
-    if (value) params.set(`filter_${key}`, value)
+export function getTableRows(table, options = {}) {
+  const { filters = {}, ...params } = options
+  const query = { ...params }
+
+  for (const [column, value] of Object.entries(filters)) {
+    query[`filter_${column}`] = value
   }
-  return requestJson(`/api/tables/${encodeURIComponent(table)}/rows?${params.toString()}`)
+
+  return requestJson(`/api/tables/${encodeURIComponent(table)}/rows`, query)
 }
 
-export function fetchRowDetail(table, id) {
+export function getRowDetail(table, id) {
   return requestJson(`/api/tables/${encodeURIComponent(table)}/rows/${encodeURIComponent(id)}`)
 }

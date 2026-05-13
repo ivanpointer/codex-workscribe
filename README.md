@@ -75,13 +75,9 @@ codex-workscribe/
 
 ## Local Data Explorer
 
-Run a read-only local web explorer for the collected SQLite data:
+Run `workscribe explore --path .` from a project or program directory to inspect local collection data.
 
-```text
-workscribe explore --path .
-```
-
-The command discovers the nearest Workscribe program root, opens `.codex-workscribe.sqlite` in read-only mode, and serves a Vue workbench at a localhost URL. The explorer is for inspecting raw collection data while refining the tooling. It does not edit rows or export reports.
+The command discovers the nearest Workscribe program root, opens `.codex-workscribe.sqlite` in read-only mode, and serves a Vue workbench at localhost. It is intended for inspecting raw collection data while refining tooling; it does not edit rows or export reports.
 
 ## Design Docs
 

@@ -25,9 +25,13 @@ export function getMeta() {
   return requestJson('/api/meta')
 }
 
+export const fetchMeta = getMeta
+
 export function getTables() {
   return requestJson('/api/tables')
 }
+
+export const fetchTables = getTables
 
 export function getTableRows(table, options = {}) {
   const { filters = {}, ...params } = options
@@ -40,6 +44,10 @@ export function getTableRows(table, options = {}) {
   return requestJson(`/api/tables/${encodeURIComponent(table)}/rows`, query)
 }
 
+export const fetchRows = (options) => getTableRows(options.table, options)
+
 export function getRowDetail(table, id) {
   return requestJson(`/api/tables/${encodeURIComponent(table)}/rows/${encodeURIComponent(id)}`)
 }
+
+export const fetchRowDetail = getRowDetail

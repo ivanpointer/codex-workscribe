@@ -35,6 +35,33 @@ class ExploreCliTests(unittest.TestCase):
         discover_workspace.assert_called_once_with(Path(".").resolve())
         run_explorer.assert_called_once_with(workspace, host="localhost", port=8765, open_browser=False)
 
+    def test_cmd_explore_rejects_non_loopback_host(self) -> None:
+        args = argparse.Namespace(path=Path("."), host="0.0.0.0", port=8765, open_browser=False)
+
+        with (
+            patch("workscribe.cli.discover_workspace") as discover_workspace,
+            patch("workscribe.cli.run_explorer") as run_explorer,
+        ):
+            with self.assertRaisesRegex(cli.WorkscribeError, "local-only"):
+                cli.cmd_explore(args)
+
+        discover_workspace.assert_not_called()
+        run_explorer.assert_not_called()
+
+    def test_cmd_explore_allows_ipv6_loopback(self) -> None:
+        workspace = Mock()
+        args = argparse.Namespace(path=Path("."), host="::1", port=8765, open_browser=False)
+
+        with (
+            patch("workscribe.cli.discover_workspace", return_value=workspace) as discover_workspace,
+            patch("workscribe.cli.run_explorer") as run_explorer,
+        ):
+            exit_code = cli.cmd_explore(args)
+
+        self.assertEqual(0, exit_code)
+        discover_workspace.assert_called_once_with(Path(".").resolve())
+        run_explorer.assert_called_once_with(workspace, host="::1", port=8765, open_browser=False)
+
 
 if __name__ == "__main__":
     unittest.main()

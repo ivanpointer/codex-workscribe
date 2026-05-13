@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import sys
 from pathlib import Path
 
@@ -446,9 +447,21 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def cmd_explore(args: argparse.Namespace) -> int:
+    validate_explorer_host(args.host)
     workspace = discover_workspace(args.path.resolve())
     run_explorer(workspace, host=args.host, port=args.port, open_browser=args.open_browser)
     return 0
+
+
+def validate_explorer_host(host: str) -> None:
+    if host == "localhost":
+        return
+    try:
+        if ipaddress.ip_address(host).is_loopback:
+            return
+    except ValueError:
+        pass
+    raise WorkscribeError("The explorer is local-only; --host must be localhost or a loopback address.")
 
 
 def cmd_hook_codex(args: argparse.Namespace) -> int:

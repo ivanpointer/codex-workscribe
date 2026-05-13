@@ -13,3 +13,4 @@ tmp/
 coverage/
 .superpowers/
 .worktrees/
+node_modules/

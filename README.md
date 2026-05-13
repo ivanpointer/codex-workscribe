@@ -73,6 +73,16 @@ codex-workscribe/
    - CSV/JSON exports for invoice support
    - simple SVG charts for client-facing context
 
+## Local Data Explorer
+
+Run a read-only local web explorer for the collected SQLite data:
+
+```text
+workscribe explore --path .
+```
+
+The command discovers the nearest Workscribe program root, opens `.codex-workscribe.sqlite` in read-only mode, and serves a Vue workbench at a localhost URL. The explorer is for inspecting raw collection data while refining the tooling. It does not edit rows or export reports.
+
 ## Design Docs
 
 - [Architecture](docs/architecture.md)

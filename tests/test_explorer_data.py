@@ -172,6 +172,27 @@ class ExplorerDataTests(unittest.TestCase):
             with self.assertRaisesRegex(ExplorerQueryError, "Unknown column"):
                 list_rows(conn, "sessions", filters={"missing": "value"})
 
+    def test_list_rows_quotes_schema_derived_column_names_with_embedded_double_quotes(self) -> None:
+        with self.make_db() as conn:
+            conn.execute('CREATE TABLE odd_columns (id INTEGER PRIMARY KEY, "strange""name" TEXT NOT NULL)')
+            conn.execute('INSERT INTO odd_columns (id, "strange""name") VALUES (1, ?)', ("needle",))
+
+            original_tables = explorer_data.WORKSCRIBE_TABLES
+            explorer_data.WORKSCRIBE_TABLES = (*original_tables, "odd_columns")
+            try:
+                result = list_rows(
+                    conn,
+                    "odd_columns",
+                    sort='strange"name',
+                    search="needle",
+                    filters={'strange"name': "need"},
+                )
+            finally:
+                explorer_data.WORKSCRIBE_TABLES = original_tables
+
+        self.assertEqual(1, result["total"])
+        self.assertEqual("needle", result["rows"][0]['strange"name'])
+
     def test_get_row_detail_parses_projects_tags_json_and_finds_sessions_related_by_project_id(self) -> None:
         with self.make_db() as conn:
             self.seed_client_project_session_rows(conn)

@@ -102,7 +102,7 @@ def list_rows(
     )
     cursor = conn.execute(
         f'SELECT * FROM "{table}"{where_sql} '
-        f'ORDER BY "{sort_column}" {normalized_direction.upper()} '
+        f"ORDER BY {_quote_identifier(sort_column)} {normalized_direction.upper()} "
         "LIMIT ? OFFSET ?",
         (*params, normalized_limit, normalized_offset),
     )
@@ -125,7 +125,7 @@ def get_row_detail(conn: sqlite3.Connection, table: str, row_id: Any) -> dict[st
     if "id" not in column_names:
         raise ExplorerQueryError(f"Table has no id column: {table}")
 
-    cursor = conn.execute(f'SELECT * FROM "{table}" WHERE "id" = ?', (row_id,))
+    cursor = conn.execute(f"SELECT * FROM \"{table}\" WHERE {_quote_identifier('id')} = ?", (row_id,))
     rows = _cursor_dicts(cursor)
     if not rows:
         raise ExplorerQueryError(f"Row not found in {table}: {row_id}")
@@ -199,7 +199,7 @@ def _get_related(conn: sqlite3.Connection, table: str, row_id: Any) -> list[dict
             ):
                 count = _fetch_one_value(
                     conn,
-                    f'SELECT COUNT(*) FROM "{candidate}" WHERE "{foreign_key["column"]}" = ?',
+                    f"SELECT COUNT(*) FROM \"{candidate}\" WHERE {_quote_identifier(foreign_key['column'])} = ?",
                     (row_id,),
                 )
                 related.append(
@@ -226,7 +226,10 @@ def _build_where(
         if searchable_columns:
             conditions.append(
                 "("
-                + " OR ".join(f'CAST("{column}" AS TEXT) LIKE ?' for column in searchable_columns)
+                + " OR ".join(
+                    f"CAST({_quote_identifier(column)} AS TEXT) LIKE ?"
+                    for column in searchable_columns
+                )
                 + ")"
             )
             params.extend([f"%{search}%"] * len(searchable_columns))
@@ -234,7 +237,7 @@ def _build_where(
     for column, value in (filters or {}).items():
         if column not in column_names:
             raise ExplorerQueryError(f"Unknown column: {column}")
-        conditions.append(f'CAST("{column}" AS TEXT) LIKE ?')
+        conditions.append(f"CAST({_quote_identifier(column)} AS TEXT) LIKE ?")
         params.append(f"%{value}%")
 
     if not conditions:
@@ -251,6 +254,10 @@ def _default_sort_column(column_names: list[str]) -> str:
 
 def _count_rows(conn: sqlite3.Connection, table: str) -> int:
     return int(_fetch_one_value(conn, f'SELECT COUNT(*) FROM "{table}"', ()))
+
+
+def _quote_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
 
 
 def _fetch_one_value(conn: sqlite3.Connection, sql: str, params: tuple[Any, ...]) -> Any:

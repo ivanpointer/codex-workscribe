@@ -2,8 +2,10 @@ import sqlite3
 import unittest
 
 from workscribe.db import initialize_database
+from workscribe.explorer import data as explorer_data
 from workscribe.explorer.data import (
     ExplorerQueryError,
+    WORKSCRIBE_TABLES,
     get_row_detail,
     get_table_metadata,
     list_rows,
@@ -90,13 +92,22 @@ class ExplorerDataTests(unittest.TestCase):
 
     def test_metadata_lists_sessions_and_session_key_and_primary_key_id(self) -> None:
         with self.make_db() as conn:
+            self.seed_client_project_session_rows(conn)
+
             metadata = get_table_metadata(conn)
 
         sessions = next(table for table in metadata if table["name"] == "sessions")
+        projects = next(table for table in metadata if table["name"] == "projects")
 
-        self.assertIn("sessions", [table["name"] for table in metadata])
+        self.assertEqual(list(WORKSCRIBE_TABLES), [table["name"] for table in metadata])
+        self.assertEqual(3, sessions["count"])
+        self.assertEqual(2, projects["count"])
+        self.assertEqual({"name", "type", "primary_key"}, set(sessions["columns"][0].keys()))
         self.assertIn("session_key", [column["name"] for column in sessions["columns"]])
         self.assertEqual(["id"], sessions["primary_key"])
+        session_key_column = next(column for column in sessions["columns"] if column["name"] == "session_key")
+        self.assertEqual({"name": "session_key", "type": "TEXT", "primary_key": False}, session_key_column)
+        self.assertEqual({"column", "references_table", "references_column"}, set(sessions["foreign_keys"][0].keys()))
         self.assertIn(
             {"column": "project_id", "references_table": "projects", "references_column": "id"},
             sessions["foreign_keys"],
@@ -134,7 +145,23 @@ class ExplorerDataTests(unittest.TestCase):
         self.assertEqual(["sess-alpha-2"], [row["session_key"] for row in searched["rows"]])
         self.assertEqual(["sess-alpha-1"], [row["session_key"] for row in filtered["rows"]])
 
-    def test_list_rows_rejects_unknown_table_and_unknown_sort_column(self) -> None:
+    def test_list_rows_clamps_limit_offset_and_normalizes_non_asc_direction(self) -> None:
+        with self.make_db() as conn:
+            self.seed_client_project_session_rows(conn)
+
+            low_limit = list_rows(conn, "sessions", limit=0)
+            high_limit = list_rows(conn, "sessions", limit=999)
+            negative_offset = list_rows(conn, "sessions", offset=-20)
+            weird_direction = list_rows(conn, "sessions", sort="created_at", direction="sideways")
+
+        self.assertEqual(1, low_limit["limit"])
+        self.assertEqual(1, len(low_limit["rows"]))
+        self.assertEqual(200, high_limit["limit"])
+        self.assertEqual(0, negative_offset["offset"])
+        self.assertEqual("desc", weird_direction["direction"])
+        self.assertEqual(["sess-beta-1", "sess-alpha-2", "sess-alpha-1"], [row["session_key"] for row in weird_direction["rows"]])
+
+    def test_list_rows_rejects_unknown_table_sort_column_and_filter_column(self) -> None:
         with self.make_db() as conn:
             with self.assertRaises(ExplorerQueryError):
                 list_rows(conn, "sqlite_master")
@@ -142,19 +169,58 @@ class ExplorerDataTests(unittest.TestCase):
             with self.assertRaisesRegex(ExplorerQueryError, "Unknown column"):
                 list_rows(conn, "sessions", sort="missing")
 
+            with self.assertRaisesRegex(ExplorerQueryError, "Unknown column"):
+                list_rows(conn, "sessions", filters={"missing": "value"})
+
     def test_get_row_detail_parses_projects_tags_json_and_finds_sessions_related_by_project_id(self) -> None:
         with self.make_db() as conn:
             self.seed_client_project_session_rows(conn)
+            conn.execute(
+                """
+                INSERT INTO installations (
+                    id, program_root, install_scope, codex_hooks_enabled, git_hooks_enabled,
+                    installed_at, updated_at, notes_json
+                )
+                VALUES (
+                    1, '/tmp/alpha', 'repo', 1, 0,
+                    '2026-01-10T00:00:00Z', '2026-01-10T00:00:00Z',
+                    '{"installed_by": "test"}'
+                )
+                """
+            )
 
             detail = get_row_detail(conn, "projects", 1)
+            invalid_json_detail = get_row_detail(conn, "projects", 2)
+            notes_detail = get_row_detail(conn, "installations", 1)
 
         self.assertEqual("projects", detail["table"])
         self.assertEqual("Alpha Project", detail["row"]["name"])
         self.assertEqual({"tags_json": ["alpha", "billable"]}, detail["parsed_json"])
+        self.assertEqual({}, invalid_json_detail["parsed_json"])
+        self.assertEqual({"notes_json": {"installed_by": "test"}}, notes_detail["parsed_json"])
         self.assertIn(
             {"table": "sessions", "column": "project_id", "value": 1, "count": 2},
             detail["related"],
         )
+
+    def test_get_row_detail_rejects_unknown_table_missing_row_and_tables_without_id(self) -> None:
+        with self.make_db() as conn:
+            self.seed_client_project_session_rows(conn)
+            conn.execute("CREATE TABLE no_id (name TEXT NOT NULL)")
+
+            with self.assertRaises(ExplorerQueryError):
+                get_row_detail(conn, "sqlite_master", 1)
+
+            with self.assertRaises(ExplorerQueryError):
+                get_row_detail(conn, "projects", 999)
+
+            original_tables = explorer_data.WORKSCRIBE_TABLES
+            explorer_data.WORKSCRIBE_TABLES = (*original_tables, "no_id")
+            try:
+                with self.assertRaises(ExplorerQueryError):
+                    get_row_detail(conn, "no_id", 1)
+            finally:
+                explorer_data.WORKSCRIBE_TABLES = original_tables
 
 
 if __name__ == "__main__":

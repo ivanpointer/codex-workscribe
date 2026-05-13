@@ -79,6 +79,18 @@ Run `workscribe explore --path .` from a project or program directory to inspect
 
 The command discovers the nearest Workscribe program root, opens `.codex-workscribe.sqlite` in read-only mode, and serves a Vue workbench at localhost. It is intended for inspecting raw collection data while refining tooling; it does not edit rows or export reports.
 
+For a clean local install in a project directory, create a project-local virtual environment and install this checkout in editable mode:
+
+```text
+scripts/setup-local-venv.sh ~/Source/hypknowledge
+```
+
+Then launch with:
+
+```text
+~/Source/hypknowledge/.venv/bin/workscribe explore --path ~/Source/hypknowledge
+```
+
 ## Design Docs
 
 - [Architecture](docs/architecture.md)

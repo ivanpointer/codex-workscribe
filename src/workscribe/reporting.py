@@ -77,6 +77,7 @@ def fetch_report_data(conn: sqlite3.Connection, project_id: int, window: ReportW
             params,
         ).fetchall()
     ]
+    backfill_session_elapsed_seconds(conn, sessions)
     notes = [
         dict(row)
         for row in conn.execute(
@@ -169,6 +170,7 @@ def fetch_program_report_data(conn: sqlite3.Connection, program_root: str, windo
             params,
         ).fetchall()
     ]
+    backfill_session_elapsed_seconds(conn, sessions)
     notes = [
         dict(row)
         for row in conn.execute(
@@ -244,6 +246,47 @@ def fetch_program_report_data(conn: sqlite3.Connection, program_root: str, windo
         "prompts_count": int(prompts or 0),
         "tool_events_count": int(tool_events or 0),
     }
+
+
+def backfill_session_elapsed_seconds(conn: sqlite3.Connection, sessions: list[dict[str, Any]]) -> None:
+    for session in sessions:
+        if session.get("elapsed_seconds") is not None:
+            continue
+        stamps = [
+            row["observed_at"]
+            for row in conn.execute(
+                """
+                SELECT submitted_at AS observed_at
+                FROM prompts
+                WHERE session_id = ?
+                UNION ALL
+                SELECT captured_at AS observed_at
+                FROM tool_events
+                WHERE session_id = ?
+                ORDER BY observed_at
+                """,
+                (session["id"], session["id"]),
+            ).fetchall()
+            if row["observed_at"]
+        ]
+        if not stamps:
+            continue
+        session["elapsed_seconds"] = observed_elapsed_seconds(stamps)
+        if session.get("ended_at") is None:
+            session["ended_at"] = stamps[-1]
+
+
+def observed_elapsed_seconds(stamps: list[str], max_gap_seconds: int = 45 * 60) -> int:
+    if len(stamps) < 2:
+        return 0
+    total = 0
+    previous_dt = datetime.fromisoformat(stamps[0])
+    for stamp in stamps[1:]:
+        current_dt = datetime.fromisoformat(stamp)
+        gap_seconds = int((current_dt - previous_dt).total_seconds())
+        total += min(max(gap_seconds, 0), max_gap_seconds)
+        previous_dt = current_dt
+    return total
 
 
 def build_report_payload(data: dict[str, Any]) -> dict[str, Any]:

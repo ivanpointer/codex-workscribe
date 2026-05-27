@@ -18,6 +18,7 @@ from workscribe.db import (
     insert_config_snapshot,
     insert_prompt,
     insert_tool_event,
+    record_session_activity,
     upsert_project_metadata,
     utc_now,
 )
@@ -147,6 +148,7 @@ def load_snapshot_config(workspace, *, include_repo: bool) -> dict[str, Any]:
 
 
 def record_session_start(conn, metadata: MetadataContext, workspace, payload: dict[str, Any]) -> None:
+    observed_at = utc_now()
     ensure_session(
         conn,
         session_key=payload["session_id"],
@@ -161,9 +163,10 @@ def record_session_start(conn, metadata: MetadataContext, workspace, payload: di
         tmux_pane=os.environ.get("TMUX_PANE"),
         cmux_workspace=os.environ.get("CMUX_WORKSPACE_ID"),
         cmux_surface=os.environ.get("CMUX_SURFACE_ID"),
-        started_at=utc_now(),
+        started_at=observed_at,
         status="active",
     )
+    record_session_activity(conn, session_key=payload["session_id"], observed_at=observed_at)
 
 
 def record_user_prompt(conn, metadata: MetadataContext, workspace, payload: dict[str, Any]) -> None:
@@ -183,12 +186,14 @@ def record_user_prompt(conn, metadata: MetadataContext, workspace, payload: dict
         cmux_surface=os.environ.get("CMUX_SURFACE_ID"),
         status="active",
     )
+    observed_at = utc_now()
     insert_prompt(
         conn,
         session_id=session_id,
-        submitted_at=utc_now(),
+        submitted_at=observed_at,
         prompt_text=str(payload.get("prompt") or ""),
     )
+    record_session_activity(conn, session_key=payload["session_id"], observed_at=observed_at)
 
 
 def record_post_tool_use(conn, metadata: MetadataContext, workspace, payload: dict[str, Any]) -> None:
@@ -208,6 +213,7 @@ def record_post_tool_use(conn, metadata: MetadataContext, workspace, payload: di
         cmux_surface=os.environ.get("CMUX_SURFACE_ID"),
         status="active",
     )
+    observed_at = utc_now()
     insert_tool_event(
         conn,
         session_id=session_id,
@@ -216,15 +222,19 @@ def record_post_tool_use(conn, metadata: MetadataContext, workspace, payload: di
         tool_name=as_optional_str(payload.get("tool_name")),
         tool_input=payload.get("tool_input"),
         tool_response=payload.get("tool_response"),
-        captured_at=utc_now(),
+        captured_at=observed_at,
     )
+    record_session_activity(conn, session_key=payload["session_id"], observed_at=observed_at)
 
 
 def record_stop(conn, metadata: MetadataContext, payload: dict[str, Any]) -> None:
     # Codex emits Stop after each completed turn, so treating it as a terminal
-    # session boundary corrupts session state. Keep this as a compatibility
-    # no-op until installed hook configs are refreshed.
-    _ = (conn, metadata, payload)
+    # session boundary corrupts session state. Treat it as observed activity
+    # only for older hook installations that still emit Workscribe Stop hooks.
+    _ = metadata
+    session_key = payload.get("session_id")
+    if session_key:
+        record_session_activity(conn, session_key=session_key, observed_at=utc_now())
 
 
 def record_post_commit(conn, metadata: MetadataContext, git_root: Path) -> None:

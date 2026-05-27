@@ -337,6 +337,48 @@ def finalize_session(conn: sqlite3.Connection, *, session_key: str, ended_at: st
     )
 
 
+def record_session_activity(
+    conn: sqlite3.Connection,
+    *,
+    session_key: str,
+    observed_at: str,
+    max_gap_seconds: int = 45 * 60,
+) -> None:
+    row = conn.execute(
+        """
+        SELECT started_at, ended_at, elapsed_seconds
+        FROM sessions
+        WHERE session_key = ?
+        """,
+        (session_key,),
+    ).fetchone()
+    if row is None:
+        return
+
+    previous_at = row["ended_at"] or row["started_at"]
+    additional_seconds = 0
+    if previous_at:
+        previous_dt = datetime.fromisoformat(previous_at)
+        observed_dt = datetime.fromisoformat(observed_at)
+        gap_seconds = int((observed_dt - previous_dt).total_seconds())
+        additional_seconds = min(max(gap_seconds, 0), max_gap_seconds)
+
+    elapsed_seconds = int(row["elapsed_seconds"] or 0) + additional_seconds
+    conn.execute(
+        """
+        UPDATE sessions
+        SET ended_at = CASE
+                WHEN ended_at IS NULL OR ended_at < ? THEN ?
+                ELSE ended_at
+            END,
+            elapsed_seconds = ?,
+            updated_at = ?
+        WHERE session_key = ?
+        """,
+        (observed_at, observed_at, elapsed_seconds, utc_now(), session_key),
+    )
+
+
 def next_prompt_index(conn: sqlite3.Connection, session_id: int) -> int:
     row = conn.execute(
         "SELECT COALESCE(MAX(prompt_index), 0) + 1 AS next_index FROM prompts WHERE session_id = ?",

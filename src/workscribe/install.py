@@ -16,6 +16,7 @@ CODEX_HOOKS_MARKER = "workscribe-managed hooks"
 LEGACY_CODEX_HOOKS_MARKER = "workscribe-managed codex_hooks"
 DEFAULT_GLOBAL_GIT_HOOKS_DIR = Path.home() / ".config" / "workscribe" / "git-hooks"
 DEFAULT_GLOBAL_STATE_PATH = Path.home() / ".config" / "workscribe" / "global-state.json"
+WORKSCRIBE_CODEX_HOOK_FRAGMENT = "-m workscribe hook codex"
 
 
 def codex_hook_command() -> str:
@@ -42,7 +43,7 @@ def install_codex_hooks(repo_root: Path) -> Path:
         raise WorkscribeError(f"Unexpected hooks object in {hooks_path}")
 
     command = codex_hook_command()
-    remove_lifecycle_hook_command(hooks, "Stop", command)
+    remove_lifecycle_hook_command_fragment(hooks, WORKSCRIBE_CODEX_HOOK_FRAGMENT)
     ensure_lifecycle_hook(
         hooks,
         "SessionStart",
@@ -97,7 +98,6 @@ def uninstall_codex_hooks(repo_root: Path) -> Path | None:
     hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         return hooks_path
-    command_fragment = "-m workscribe hook codex"
     empty_events = []
     for event_name, entries in hooks.items():
         if not isinstance(entries, list):
@@ -117,7 +117,7 @@ def uninstall_codex_hooks(repo_root: Path) -> Path | None:
                 if not (
                     isinstance(hook, dict)
                     and hook.get("type") == "command"
-                    and command_fragment in str(hook.get("command", ""))
+                    and WORKSCRIBE_CODEX_HOOK_FRAGMENT in str(hook.get("command", ""))
                 )
             ]
             if filtered:
@@ -213,36 +213,36 @@ def ensure_lifecycle_hook(hooks: dict[str, Any], event_name: str, new_entry: dic
     entries.append(new_entry)
 
 
-def remove_lifecycle_hook_command(hooks: dict[str, Any], event_name: str, command: str) -> None:
-    entries = hooks.get(event_name)
-    if not isinstance(entries, list):
-        return
-
-    retained_entries = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            retained_entries.append(entry)
+def remove_lifecycle_hook_command_fragment(hooks: dict[str, Any], command_fragment: str) -> None:
+    empty_events = []
+    for event_name, entries in hooks.items():
+        if not isinstance(entries, list):
             continue
-        hook_list = entry.get("hooks")
-        if not isinstance(hook_list, list):
-            retained_entries.append(entry)
-            continue
-        filtered = [
-            hook
-            for hook in hook_list
-            if not (
-                isinstance(hook, dict)
-                and hook.get("type") == "command"
-                and hook.get("command") == command
-            )
-        ]
-        if filtered:
-            entry["hooks"] = filtered
-            retained_entries.append(entry)
-
-    if retained_entries:
+        retained_entries = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                retained_entries.append(entry)
+                continue
+            hook_list = entry.get("hooks")
+            if not isinstance(hook_list, list):
+                retained_entries.append(entry)
+                continue
+            filtered = [
+                hook
+                for hook in hook_list
+                if not (
+                    isinstance(hook, dict)
+                    and hook.get("type") == "command"
+                    and command_fragment in str(hook.get("command", ""))
+                )
+            ]
+            if filtered:
+                entry["hooks"] = filtered
+                retained_entries.append(entry)
         hooks[event_name] = retained_entries
-    else:
+        if not retained_entries:
+            empty_events.append(event_name)
+    for event_name in empty_events:
         hooks.pop(event_name, None)
 
 
@@ -354,7 +354,7 @@ def install_codex_hooks_in_dir(codex_dir: Path) -> Path:
         raise WorkscribeError(f"Unexpected hooks object in {hooks_path}")
 
     command = codex_hook_command()
-    remove_lifecycle_hook_command(hooks, "Stop", command)
+    remove_lifecycle_hook_command_fragment(hooks, WORKSCRIBE_CODEX_HOOK_FRAGMENT)
     ensure_lifecycle_hook(
         hooks,
         "SessionStart",
@@ -409,7 +409,6 @@ def uninstall_codex_hooks_in_dir(codex_dir: Path) -> Path | None:
     hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         return hooks_path
-    command_fragment = "-m workscribe hook codex"
     empty_events = []
     for event_name, entries in hooks.items():
         if not isinstance(entries, list):
@@ -429,7 +428,7 @@ def uninstall_codex_hooks_in_dir(codex_dir: Path) -> Path | None:
                 if not (
                     isinstance(hook, dict)
                     and hook.get("type") == "command"
-                    and command_fragment in str(hook.get("command", ""))
+                    and WORKSCRIBE_CODEX_HOOK_FRAGMENT in str(hook.get("command", ""))
                 )
             ]
             if filtered:

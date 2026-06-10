@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import subprocess
@@ -16,19 +17,30 @@ CODEX_HOOKS_MARKER = "workscribe-managed hooks"
 LEGACY_CODEX_HOOKS_MARKER = "workscribe-managed codex_hooks"
 DEFAULT_GLOBAL_GIT_HOOKS_DIR = Path.home() / ".config" / "workscribe" / "git-hooks"
 DEFAULT_GLOBAL_STATE_PATH = Path.home() / ".config" / "workscribe" / "global-state.json"
-WORKSCRIBE_CODEX_HOOK_FRAGMENT = "-m workscribe hook codex"
+WORKSCRIBE_CODEX_HOOK_MARKER = "workscribe-managed-codex-hook"
+LEGACY_WORKSCRIBE_CODEX_HOOK_FRAGMENT = "-m workscribe hook codex"
+WORKSCRIBE_CODEX_HOOK_FRAGMENTS = (
+    WORKSCRIBE_CODEX_HOOK_MARKER,
+    LEGACY_WORKSCRIBE_CODEX_HOOK_FRAGMENT,
+)
 
 
 def codex_hook_command() -> str:
+    launcher = stable_workscribe_launcher()
+    if launcher is not None:
+        return f'{shell_path(launcher)} hook codex # {WORKSCRIBE_CODEX_HOOK_MARKER}'
     python = Path(sys.executable).resolve()
     prefix = pythonpath_prefix()
-    return f'{prefix}"{python}" -m workscribe hook codex'
+    return f'{prefix}{shell_path(python)} -m workscribe hook codex # {WORKSCRIBE_CODEX_HOOK_MARKER}'
 
 
 def git_hook_command(hook_name: str) -> str:
+    launcher = stable_workscribe_launcher()
+    if launcher is not None:
+        return f'exec {shell_path(launcher)} hook git {hook_name} "$@"'
     python = Path(sys.executable).resolve()
     prefix = pythonpath_prefix()
-    return f'{prefix}exec "{python}" -m workscribe hook git {hook_name} "$@"'
+    return f'{prefix}exec {shell_path(python)} -m workscribe hook git {hook_name} "$@"'
 
 
 def install_codex_hooks(repo_root: Path) -> Path:
@@ -43,7 +55,7 @@ def install_codex_hooks(repo_root: Path) -> Path:
         raise WorkscribeError(f"Unexpected hooks object in {hooks_path}")
 
     command = codex_hook_command()
-    remove_lifecycle_hook_command_fragment(hooks, WORKSCRIBE_CODEX_HOOK_FRAGMENT)
+    remove_lifecycle_workscribe_codex_hook_commands(hooks)
     ensure_lifecycle_hook(
         hooks,
         "SessionStart",
@@ -117,7 +129,7 @@ def uninstall_codex_hooks(repo_root: Path) -> Path | None:
                 if not (
                     isinstance(hook, dict)
                     and hook.get("type") == "command"
-                    and WORKSCRIBE_CODEX_HOOK_FRAGMENT in str(hook.get("command", ""))
+                    and is_workscribe_codex_hook_command(str(hook.get("command", "")))
                 )
             ]
             if filtered:
@@ -213,7 +225,7 @@ def ensure_lifecycle_hook(hooks: dict[str, Any], event_name: str, new_entry: dic
     entries.append(new_entry)
 
 
-def remove_lifecycle_hook_command_fragment(hooks: dict[str, Any], command_fragment: str) -> None:
+def remove_lifecycle_workscribe_codex_hook_commands(hooks: dict[str, Any]) -> None:
     empty_events = []
     for event_name, entries in hooks.items():
         if not isinstance(entries, list):
@@ -233,7 +245,7 @@ def remove_lifecycle_hook_command_fragment(hooks: dict[str, Any], command_fragme
                 if not (
                     isinstance(hook, dict)
                     and hook.get("type") == "command"
-                    and command_fragment in str(hook.get("command", ""))
+                    and is_workscribe_codex_hook_command(str(hook.get("command", "")))
                 )
             ]
             if filtered:
@@ -354,7 +366,7 @@ def install_codex_hooks_in_dir(codex_dir: Path) -> Path:
         raise WorkscribeError(f"Unexpected hooks object in {hooks_path}")
 
     command = codex_hook_command()
-    remove_lifecycle_hook_command_fragment(hooks, WORKSCRIBE_CODEX_HOOK_FRAGMENT)
+    remove_lifecycle_workscribe_codex_hook_commands(hooks)
     ensure_lifecycle_hook(
         hooks,
         "SessionStart",
@@ -428,7 +440,7 @@ def uninstall_codex_hooks_in_dir(codex_dir: Path) -> Path | None:
                 if not (
                     isinstance(hook, dict)
                     and hook.get("type") == "command"
-                    and WORKSCRIBE_CODEX_HOOK_FRAGMENT in str(hook.get("command", ""))
+                    and is_workscribe_codex_hook_command(str(hook.get("command", "")))
                 )
             ]
             if filtered:
@@ -523,6 +535,29 @@ def find_section_end(lines: list[str], start_index: int) -> int:
         if stripped.startswith("[") and stripped.endswith("]"):
             return index
     return len(lines)
+
+
+def stable_workscribe_launcher() -> Path | None:
+    candidates = [Path.home() / ".local" / "bin" / "workscribe"]
+    path_candidate = shutil.which("workscribe")
+    if path_candidate:
+        candidates.append(Path(path_candidate))
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate
+        if resolved.is_file() and os.access(resolved, os.X_OK):
+            return resolved
+    return None
+
+
+def shell_path(path: Path) -> str:
+    return '"' + str(path).replace('"', '\\"') + '"'
+
+
+def is_workscribe_codex_hook_command(command: str) -> bool:
+    return any(fragment in command for fragment in WORKSCRIBE_CODEX_HOOK_FRAGMENTS)
 
 
 def pythonpath_prefix() -> str:

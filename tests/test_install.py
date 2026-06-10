@@ -1,11 +1,13 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 import unittest
 
 from workscribe.install import (
     disable_codex_hooks_feature_marker,
     ensure_codex_hooks_feature_enabled,
     install_codex_hooks_in_dir,
+    render_git_hook_script,
 )
 
 
@@ -69,7 +71,40 @@ class CodexHooksFeatureConfigTests(unittest.TestCase):
 
             text = hooks_path.read_text()
             self.assertNotIn(stale_command, text)
-            self.assertEqual(text.count("-m workscribe hook codex"), 3)
+            self.assertEqual(text.count("hook codex"), 3)
+            self.assertEqual(text.count("workscribe-managed-codex-hook"), 3)
+
+    def test_install_codex_hooks_prefers_stable_workscribe_launcher(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            home = temp_path / "home"
+            launcher = home / ".local" / "bin" / "workscribe"
+            launcher.parent.mkdir(parents=True)
+            launcher.write_text("#!/bin/sh\n")
+            launcher.chmod(0o755)
+            codex_dir = temp_path / "codex"
+
+            with patch("workscribe.install.Path.home", return_value=home):
+                install_codex_hooks_in_dir(codex_dir)
+
+            text = (codex_dir / "hooks.json").read_text()
+            self.assertEqual(text.count(str(launcher.resolve())), 3)
+            self.assertEqual(text.count("workscribe-managed-codex-hook"), 3)
+            self.assertNotIn("-m workscribe hook codex", text)
+
+    def test_render_git_hook_prefers_stable_workscribe_launcher(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir) / "home"
+            launcher = home / ".local" / "bin" / "workscribe"
+            launcher.parent.mkdir(parents=True)
+            launcher.write_text("#!/bin/sh\n")
+            launcher.chmod(0o755)
+
+            with patch("workscribe.install.Path.home", return_value=home):
+                script = render_git_hook_script("post-commit", None)
+
+            self.assertIn(f'exec "{launcher.resolve()}" hook git post-commit "$@"', script)
+            self.assertNotIn("-m workscribe hook git", script)
 
 
 if __name__ == "__main__":
